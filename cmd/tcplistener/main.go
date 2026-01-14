@@ -3,39 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"mgenc2077/httpfromtcp/internal/request"
 	"net"
-	"strings"
 )
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	lines := make(chan string)
-	go func() {
-		defer close(lines)
-		str := ""
-		for {
-			data := make([]byte, 8)
-			n, err := f.Read(data)
-			if err != nil && err != io.EOF {
-				break
-			}
-			if strings.Contains(string(data[:n]), "\n") {
-				firstNewline := strings.Index(string(data[:n]), "\n")
-				str += string(data[:firstNewline])
-				lines <- str
-				remaining := data[firstNewline+1 : n]
-				str = string(remaining)
-			} else if err == io.EOF {
-				if len(str)+n > 0 {
-					lines <- str + string(data[:n])
-				}
-				break
-			} else {
-				str += string(data[:n])
-			}
-		}
-	}()
-	return lines
-}
 
 func main() {
 	listener, err := net.Listen("tcp", ":42069")
@@ -52,14 +22,14 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Client connected")
 
-	// Read lines from the connection
-	linesChan := getLinesChannel(conn)
-	for line := range linesChan {
-		fmt.Println(line)
+	req, err := request.RequestFromReader(conn)
+	if err != nil && err != io.EOF {
+		fmt.Println("Error reading request:", err)
+		return
 	}
 
-	// print on chanel closed
-	if _, ok := <-linesChan; !ok {
-		fmt.Println("Channel closed by client")
-	}
+	fmt.Println("Request line:")
+	fmt.Printf("- Method: %s\n", req.RequestLine.Method)
+	fmt.Printf("- Target: %s\n", req.RequestLine.RequestTarget)
+	fmt.Printf("- Version: %s\n", req.RequestLine.HttpVersion)
 }
