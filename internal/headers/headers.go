@@ -15,6 +15,10 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
+func (h Headers) Get(key string) string {
+	return h[key]
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	strData := string(data)
 	firstNewline := strings.Index(strData, "\r\n")

@@ -3,6 +3,7 @@ package request
 import (
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 
 	"mgenc2077/httpfromtcp/internal/headers"
@@ -13,17 +14,20 @@ const (
 	done                       = iota
 	requestStateParsingHeaders = iota
 	requestStateDone           = iota
+	parsingBody                = iota
+	bodyParsed                 = iota
 )
 
 type Request struct {
 	RequestLine RequestLine
 	State       int
 	Headers     headers.Headers
+	Body        []byte
 }
 
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
-	for r.State != requestStateDone {
+	for r.State != bodyParsed {
 		n, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
 			totalBytesParsed += n
@@ -55,11 +59,52 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		} else if done {
-			r.State = requestStateDone
+			r.State = parsingBody
 			return n, nil
 		} else {
 			return n, nil
 		}
+	} else if r.State == parsingBody {
+		contentLengthStr := 0
+		lenHead := r.Headers.Get("content-length")
+		if lenHead != "" {
+			var err error
+			contentLengthStr, err = strconv.Atoi(lenHead)
+			if err != nil {
+				return 0, errors.New("Content Length is not a valid integer")
+			}
+		}
+
+		targetLength := contentLengthStr
+		currentLength := len(r.Body)
+		remainingNeeded := targetLength - currentLength
+
+		if remainingNeeded <= 0 {
+			r.State = bodyParsed
+			return 0, nil
+		}
+
+		bytesToRead := len(data)
+		if bytesToRead > remainingNeeded {
+			bytesToRead = remainingNeeded
+		}
+
+		if bytesToRead == 0 {
+			return 0, nil
+		}
+
+		// Append data to body
+		newbody := make([]byte, currentLength+bytesToRead)
+		copy(newbody, r.Body)
+		copy(newbody[currentLength:], data[:bytesToRead])
+		r.Body = newbody
+
+		if len(r.Body) == targetLength {
+			r.State = bodyParsed
+		}
+
+		return bytesToRead, nil
+
 	} else if r.State == done {
 		return 0, errors.New("error: trying to read data in a done state")
 	} else {
@@ -101,7 +146,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readToIndex -= parsedBytes
 	}
 
-	if req.State != requestStateDone {
+	if req.State != bodyParsed {
 		return nil, io.ErrUnexpectedEOF
 	}
 
