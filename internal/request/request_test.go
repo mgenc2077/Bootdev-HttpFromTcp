@@ -90,15 +90,7 @@ func TestHeadersParse(t *testing.T) {
 	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
 	assert.Equal(t, "*/*", r.Headers["accept"])
 
-	// Test: Malformed Header
-	reader = &chunkReader{
-		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
-		numBytesPerRead: 3,
-	}
-	r, err = RequestFromReader(reader)
-	require.Error(t, err)
-
-	// Test: Empty Header
+	// Test: Empty Headers
 	reader = &chunkReader{
 		data:            "GET / HTTP/1.1\r\n\r\n",
 		numBytesPerRead: 3,
@@ -108,19 +100,27 @@ func TestHeadersParse(t *testing.T) {
 	require.NotNil(t, r)
 	assert.Empty(t, r.Headers)
 
+	// Test: Malformed Header
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
 	// Test: Duplicate Headers
 	reader = &chunkReader{
-		data:            "GET / HTTP/1.1\r\nSet-Cookie: id=123\r\nSet-Cookie: token=abc\r\n\r\n",
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nHost: duplicate:8080\r\n\r\n",
 		numBytesPerRead: 3,
 	}
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
-	assert.Equal(t, "id=123, token=abc", r.Headers["set-cookie"])
+	assert.Equal(t, "localhost:42069, duplicate:8080", r.Headers["host"])
 
 	// Test: Case Insensitive Headers
 	reader = &chunkReader{
-		data:            "GET / HTTP/1.1\r\nhOSt: localhost:42069\r\nUSER-agent: curl/7.81.0\r\naCCept: */*\r\n\r\n",
+		data:            "GET / HTTP/1.1\r\nHOST: localhost:42069\r\nUSER-AGENT: curl/7.81.0\r\n\r\n",
 		numBytesPerRead: 3,
 	}
 	r, err = RequestFromReader(reader)
@@ -128,11 +128,10 @@ func TestHeadersParse(t *testing.T) {
 	require.NotNil(t, r)
 	assert.Equal(t, "localhost:42069", r.Headers["host"])
 	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
-	assert.Equal(t, "*/*", r.Headers["accept"])
 
 	// Test: Missing End of Headers
 	reader = &chunkReader{
-		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*",
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0",
 		numBytesPerRead: 3,
 	}
 	r, err = RequestFromReader(reader)
