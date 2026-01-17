@@ -14,7 +14,19 @@ const (
 	StatusInternalServerError StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type Writer struct {
+	io.Writer
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{Writer: w}
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	return w.Write(p)
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	switch statusCode {
 	case StatusOK:
 		_, err := w.Write([]byte("HTTP/1.1 200 OK\r\n"))
@@ -39,7 +51,21 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return h
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+// Modifies the default headers with the provided headers
+func ModifyDefaultHeaders(h headers.Headers, contentLen int) headers.Headers {
+	if h["Connection"] == "" {
+		h.Set("Connection", "close")
+	}
+	if h["content-type"] == "" {
+		h.Set("Content-Type", "text/plain")
+	}
+	if h["Content-Length"] == "" {
+		h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
+	}
+	return h
+}
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	for key, value := range headers {
 		_, err := w.Write([]byte(fmt.Sprintf("%s: %s\r\n", key, value)))
 		if err != nil {

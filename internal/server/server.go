@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"mgenc2077/httpfromtcp/internal/request"
@@ -17,7 +16,7 @@ type Server struct {
 	Handler    Handler
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 
 type HandlerError struct {
 	StatusCode int
@@ -69,28 +68,18 @@ func (s *Server) listen() error {
 	}
 }
 
-// Handles a single connection by writing the response and then closing the connection
 func (s *Server) handle(conn net.Conn) {
 	s.Connection = conn
 	req, err := request.RequestFromReader(conn)
 	if err != nil && err != io.EOF {
-		response.WriteStatusLine(conn, response.StatusBadRequest)
-		response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+		writer := response.NewWriter(conn)
+		writer.WriteStatusLine(response.StatusBadRequest)
+		writer.WriteHeaders(response.GetDefaultHeaders(0))
 		conn.Close()
 		return
 	}
-	buf := bytes.NewBuffer(nil)
-	handlerErr := s.Handler(buf, req)
-	var statusCode response.StatusCode = response.StatusOK
-	if handlerErr != nil {
-		statusCode = response.StatusCode(handlerErr.StatusCode)
-		if handlerErr.Err != nil {
-			buf.Reset()
-			buf.WriteString(handlerErr.Err.Error())
-		}
-	}
-	response.WriteStatusLine(conn, statusCode)
-	response.WriteHeaders(conn, response.GetDefaultHeaders(buf.Len()))
-	conn.Write(buf.Bytes())
+
+	writer := response.NewWriter(conn)
+	s.Handler(writer, req)
 	conn.Close()
 }
