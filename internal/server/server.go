@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"mgenc2077/httpfromtcp/internal/response"
 	"net"
 	"sync/atomic"
 )
@@ -59,10 +60,8 @@ func (s *Server) listen() error {
 // Handles a single connection by writing the response and then closing the connection
 func (s *Server) handle(conn net.Conn) {
 	s.Connection = conn
-	conn.Write([]byte("HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"Content-Length: 13\r\n" +
-		"\r\n" +
-		"Hello World!\n"))
+	response.WriteStatusLine(conn, response.StatusOK)
+	response.GetDefaultHeaders(0)
+	response.WriteHeaders(conn, response.GetDefaultHeaders(0))
 	conn.Close()
 }
