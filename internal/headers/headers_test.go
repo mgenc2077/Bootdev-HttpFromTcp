@@ -64,4 +64,14 @@ func TestHeadersParse(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
+
+	// Test: Multiple same headers
+	headers = map[string]string{"set-cookie": "id=123"}
+	data = []byte("Set-Cookie: token=abc\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "id=123, token=abc", headers["set-cookie"])
+	assert.Equal(t, 23, n)
+	assert.False(t, done)
 }

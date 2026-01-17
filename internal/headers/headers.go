@@ -41,7 +41,12 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 
 	val := parts[1]
-	h[strings.ToLower(strings.TrimSpace(key))] = strings.TrimSpace(val)
+
+	if h[strings.ToLower(strings.TrimSpace(key))] != "" {
+		h[strings.ToLower(strings.TrimSpace(key))] = h[strings.ToLower(strings.TrimSpace(key))] + ", " + strings.TrimSpace(val)
+	} else {
+		h[strings.ToLower(strings.TrimSpace(key))] = strings.TrimSpace(val)
+	}
 
 	return firstNewline + 2, false, nil
 }
