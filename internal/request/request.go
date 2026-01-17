@@ -73,6 +73,9 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			if err != nil {
 				return 0, errors.New("Content Length is not a valid integer")
 			}
+		} else {
+			// If Content-Length is missing, assume 0 for requests
+			contentLengthStr = 0
 		}
 
 		targetLength := contentLengthStr
@@ -121,11 +124,11 @@ type RequestLine struct {
 const bufferSize = 8
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	buf := make([]byte, bufferSize, bufferSize)
+	buf := make([]byte, bufferSize)
 	readToIndex := 0
 	req := &Request{State: initialized, Headers: headers.NewHeaders()}
 	for {
-		if req.State == requestStateDone {
+		if req.State == bodyParsed {
 			break
 		}
 		if readToIndex == len(buf) {

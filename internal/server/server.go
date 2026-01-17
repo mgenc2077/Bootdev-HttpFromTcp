@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"mgenc2077/httpfromtcp/internal/request"
 	"mgenc2077/httpfromtcp/internal/response"
 	"net"
 	"sync/atomic"
@@ -11,16 +14,25 @@ type Server struct {
 	Listener   net.Listener
 	Connection net.Conn
 	Status     atomic.Bool
+	Handler    Handler
+}
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError
+
+type HandlerError struct {
+	StatusCode int
+	Err        error
 }
 
 // Creates a net.Listener and returns a new Server instance
-func Serve(port int) (*Server, error) {
+func Serve(port int, handler Handler) (*Server, error) {
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{
 		Listener: l,
+		Handler:  handler,
 	}
 	s.Status.Store(true)
 	go s.listen()
@@ -60,8 +72,25 @@ func (s *Server) listen() error {
 // Handles a single connection by writing the response and then closing the connection
 func (s *Server) handle(conn net.Conn) {
 	s.Connection = conn
-	response.WriteStatusLine(conn, response.StatusOK)
-	response.GetDefaultHeaders(0)
-	response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+	req, err := request.RequestFromReader(conn)
+	if err != nil && err != io.EOF {
+		response.WriteStatusLine(conn, response.StatusBadRequest)
+		response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+		conn.Close()
+		return
+	}
+	buf := bytes.NewBuffer(nil)
+	handlerErr := s.Handler(buf, req)
+	var statusCode response.StatusCode = response.StatusOK
+	if handlerErr != nil {
+		statusCode = response.StatusCode(handlerErr.StatusCode)
+		if handlerErr.Err != nil {
+			buf.Reset()
+			buf.WriteString(handlerErr.Err.Error())
+		}
+	}
+	response.WriteStatusLine(conn, statusCode)
+	response.WriteHeaders(conn, response.GetDefaultHeaders(buf.Len()))
+	conn.Write(buf.Bytes())
 	conn.Close()
 }
