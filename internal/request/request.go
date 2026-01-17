@@ -4,19 +4,41 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"mgenc2077/httpfromtcp/internal/headers"
 )
 
 const (
-	initialized = iota
-	done        = iota
+	initialized                = iota
+	done                       = iota
+	requestStateParsingHeaders = iota
+	requestStateDone           = iota
 )
 
 type Request struct {
 	RequestLine RequestLine
 	State       int
+	Headers     headers.Headers
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+	totalBytesParsed := 0
+	for r.State != requestStateDone {
+		n, err := r.parseSingle(data[totalBytesParsed:])
+		if err != nil {
+			totalBytesParsed += n
+			return totalBytesParsed, err
+		}
+		if n == 0 {
+			// Not enough data to continue parsing, return what we have so far
+			return totalBytesParsed, nil
+		}
+		totalBytesParsed += n
+	}
+	return totalBytesParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
 	if r.State == initialized {
 		parsedLine, size, err := parseRequestLine(string(data))
 		if size == 0 && err == nil {
@@ -25,8 +47,18 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, err
 		} else {
 			r.RequestLine = parsedLine
-			r.State = done
+			r.State = requestStateParsingHeaders
 			return size, nil
+		}
+	} else if r.State == requestStateParsingHeaders {
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		} else if done {
+			r.State = requestStateDone
+			return n, nil
+		} else {
+			return n, nil
 		}
 	} else if r.State == done {
 		return 0, errors.New("error: trying to read data in a done state")
@@ -46,9 +78,9 @@ const bufferSize = 8
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufferSize, bufferSize)
 	readToIndex := 0
-	req := &Request{State: initialized}
+	req := &Request{State: initialized, Headers: headers.NewHeaders()}
 	for {
-		if req.State == done {
+		if req.State == requestStateDone {
 			break
 		}
 		if readToIndex == len(buf) {
@@ -58,7 +90,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		n, err := reader.Read(buf[readToIndex:])
 		if err == io.EOF {
-			req.State = done
 			break
 		}
 		readToIndex += n
@@ -68,6 +99,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		copy(buf, buf[parsedBytes:readToIndex])
 		readToIndex -= parsedBytes
+	}
+
+	if req.State != requestStateDone {
+		return nil, io.ErrUnexpectedEOF
 	}
 
 	return req, nil
