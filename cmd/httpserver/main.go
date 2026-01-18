@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,7 +30,7 @@ func handler(w *response.Writer, req *request.Request) {
     <p>Your request honestly kinda sucked.</p>
   </body>
 </html>\n`)
-		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html"}, len(body)))
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html", "content-length": fmt.Sprintf("%d", len(body))}))
 		w.Write(body)
 	case "/myproblem":
 		w.WriteStatusLine(response.StatusInternalServerError)
@@ -41,8 +43,25 @@ func handler(w *response.Writer, req *request.Request) {
     <p>Okay, you know what? This one is on me.</p>
   </body>
 </html>`)
-		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html"}, len(body)))
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html", "content-length": fmt.Sprintf("%d", len(body))}))
 		w.Write(body)
+	case "/httpbin/stream/100":
+		w.WriteStatusLine(response.StatusOK)
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "application/json", "Transfer-Encoding": "chunked"}))
+
+		resp, _ := http.Get("https://httpbin.org/stream/100")
+		for {
+			buf := make([]byte, 1024)
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				w.WriteChunkedBody(buf[:n])
+			}
+			if err != nil {
+				break
+			}
+		}
+		w.WriteChunkedBodyDone()
+
 	case "/":
 		w.WriteStatusLine(response.StatusOK)
 		body = []byte(`<html>
@@ -54,7 +73,7 @@ func handler(w *response.Writer, req *request.Request) {
     <p>Your request was an absolute banger.</p>
   </body>
 </html>`)
-		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html"}, len(body)))
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html", "content-length": fmt.Sprintf("%d", len(body))}))
 		w.Write(body)
 	}
 }

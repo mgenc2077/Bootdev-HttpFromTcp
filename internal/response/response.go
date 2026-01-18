@@ -52,15 +52,12 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 }
 
 // Modifies the default headers with the provided headers
-func ModifyDefaultHeaders(h headers.Headers, contentLen int) headers.Headers {
+func ModifyDefaultHeaders(h headers.Headers) headers.Headers {
 	if h["Connection"] == "" {
 		h.Set("Connection", "close")
 	}
 	if h["content-type"] == "" {
 		h.Set("Content-Type", "text/plain")
-	}
-	if h["Content-Length"] == "" {
-		h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
 	}
 	return h
 }
@@ -74,4 +71,32 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	}
 	_, err := w.Write([]byte("\r\n"))
 	return err
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	size := len(p)
+	// Write the size of the chunk in hexadecimal followed by \r\n
+	_, err := fmt.Fprintf(w, "%x\r\n", size)
+	if err != nil {
+		return 0, err
+	}
+	// Write the actual chunk data
+	n, err := w.Write(p)
+	if err != nil {
+		return n, err
+	}
+	// Write the trailing \r\n after the chunk data
+	_, err = w.Write([]byte("\r\n"))
+	if err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	_, err := w.Write([]byte("0\r\n\r\n"))
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
 }
