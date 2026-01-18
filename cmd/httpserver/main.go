@@ -67,6 +67,19 @@ func handler(w *response.Writer, req *request.Request) {
 		hash := sha256.Sum256(respfull)
 		w.WriteTrailers(headers.Headers{"X-Content-SHA256": fmt.Sprintf("%x", hash), "X-Content-Length": fmt.Sprintf("%d", len(respfull))})
 
+	case "/video":
+		file, err := os.ReadFile("assets/vim.mp4")
+		if err != nil {
+			w.WriteStatusLine(response.StatusInternalServerError)
+			w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-length": fmt.Sprintf("%d", len(err.Error()))}))
+			w.Write([]byte(err.Error()))
+		}
+		w.WriteStatusLine(response.StatusOK)
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "video/mp4", "Transfer-Encoding": "chunked"}))
+
+		w.WriteChunkedBody(file)
+		w.WriteChunkedBodyDone(false)
+
 	case "/":
 		w.WriteStatusLine(response.StatusOK)
 		body = []byte(`<html>
