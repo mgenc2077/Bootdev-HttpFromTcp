@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"net/http"
@@ -45,22 +46,26 @@ func handler(w *response.Writer, req *request.Request) {
 </html>`)
 		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "text/html", "content-length": fmt.Sprintf("%d", len(body))}))
 		w.Write(body)
-	case "/httpbin/stream/100":
+	case "/httpbin/html":
 		w.WriteStatusLine(response.StatusOK)
-		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "application/json", "Transfer-Encoding": "chunked"}))
+		w.WriteHeaders(response.ModifyDefaultHeaders(headers.Headers{"content-type": "application/json", "Transfer-Encoding": "chunked", "Trailer": "X-Content-SHA256, X-Content-Length"}))
 
-		resp, _ := http.Get("https://httpbin.org/stream/100")
+		resp, _ := http.Get("https://httpbin.org/html")
+		respfull := []byte{}
 		for {
 			buf := make([]byte, 1024)
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
 				w.WriteChunkedBody(buf[:n])
+				respfull = append(respfull, buf[:n]...)
 			}
 			if err != nil {
 				break
 			}
 		}
-		w.WriteChunkedBodyDone()
+		w.WriteChunkedBodyDone(true)
+		hash := sha256.Sum256(respfull)
+		w.WriteTrailers(headers.Headers{"X-Content-SHA256": fmt.Sprintf("%x", hash), "X-Content-Length": fmt.Sprintf("%d", len(respfull))})
 
 	case "/":
 		w.WriteStatusLine(response.StatusOK)

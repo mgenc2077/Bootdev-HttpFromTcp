@@ -93,10 +93,21 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 	return n, nil
 }
 
-func (w *Writer) WriteChunkedBodyDone() (int, error) {
-	_, err := w.Write([]byte("0\r\n\r\n"))
-	if err != nil {
-		return 0, err
+func (w *Writer) WriteChunkedBodyDone(trailerExists bool) (int, error) {
+	if trailerExists {
+		_, err := w.Write([]byte("0\r\n"))
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		_, err := w.Write([]byte("0\r\n\r\n"))
+		if err != nil {
+			return 0, err
+		}
 	}
 	return 0, nil
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	return w.WriteHeaders(h)
 }
